@@ -1,4 +1,5 @@
-﻿using System;
+﻿
+using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data;
@@ -16,56 +17,10 @@ namespace Filling
     {
         public Form1()
         {
-            InitializeComponent();
-            
-            
+            InitializeComponent();            
         }
-        public class BPstruct
-        {
-            public int x, y, flag;
-
-            public BPstruct()
-            {
-                x = 0;
-                y = 0;
-                flag = 0;
-            }
-
-            public BPstruct(int x, int y, int flag)
-            {
-                this.x = x;
-                this.y = y;
-                this.flag = flag;
-            }
-
-            public int Compare(BPstruct arg2)
-            {
-                BPstruct arg1 = this;
-                int i = arg1.y - arg2.y;
-                if (i != 0)
-                    return ((i < 0) ? -1 : 1);
-                i = arg1.x - arg2.x;
-                if (i != 0)
-                    return ((i < 0) ? -1 : 1);
-
-                i = arg1.flag - arg2.flag;
-                return ((i < 0) ? -1 : 1);
-            }
-        }
-
-        public class MyComparer : IEqualityComparer<BPstruct>
-        {
-            public bool Equals(BPstruct x1, BPstruct x2)
-            {
-                return (x1.x == x2.x) && (x1.y == x2.y) && (x1.flag == x2.flag);
-            }
-
-            public int GetHashCode(BPstruct obj)
-            {
-                return obj.x ^ obj.y ^ obj.flag;
-            }
-
-        }
+        
+        
 
         private bool chosing = false;
         private bool loaded = false;
@@ -74,12 +29,7 @@ namespace Filling
         private static Bitmap img;
         private bool pointIsChosen = false;
 
-        private static List<BPstruct> BP;
-        private static int BPstart;
-        private static int BPend;
-        private static Color BorderValue;
-        private static int BLOCKED = 1;
-        private static int UNBLOCKED = 2;
+        
 
         private void select_image_button_Click(object sender, EventArgs e)
         {
@@ -134,45 +84,59 @@ namespace Filling
         {
             if (!pointIsChosen)
                 return;
-            BP = new List<BPstruct>();
+            BorderList = new List<BorderPointStruct>();
             BPend = 0;
             BPstart = 0;
-            CurrentPixel = new BPstruct();
-
+            CurrentPixel = new BorderPointStruct();
+                
+            
 
             img = new Bitmap(selectedImage);
-            BorderValue = Color.Black;//img.GetPixel(chosenPoint.X, chosenPoint.Y);
+            BorderColor = Color.Black; //img.GetPixel(chosenPoint.X, chosenPoint.Y);
+            if (!img.GetPixel(chosenPoint.X, chosenPoint.Y).ToArgb().Equals(Color.Black.ToArgb()))
+                return;
             BorderFill(chosenPoint.X, chosenPoint.Y);
             pictureBox1.Image = img;
 
-            MessageBox.Show("Border selected", "Success", MessageBoxButtons.OK, MessageBoxIcon.Information); 
+            //MessageBox.Show("Border selected", "Success", MessageBoxButtons.OK, MessageBoxIcon.Information); 
         }
 
-        private void refresh()
+        private static List<BorderPointStruct> BorderList;
+        private static int BPstart;
+        private static int BPend;
+        private static Color BorderColor;
+        private static int BLOCKED = 1;
+        private static int UNBLOCKED = 2;
+
+
+        private void BorderFill(int x, int y)
         {
-            pictureBox1.Image = img;
-        }
+            if (checkBox1.Checked)
+            {
+                TraceBorder(x, y);
+                SortBP();
+                ScanRegion(ref x, ref y);
 
-        
+                TraceBorder(x, y);
+                SortBP();
+                ScanRegion(ref x, ref y);
 
-        
-        
+                FillRegion();
+            }
+            else
+            {
+                TraceBorder(x, y);
+                foreach (var p in BorderList)
+                {
+                    img.SetPixel(p.x, p.y, Color.Red);
+                    img.SetPixel(p.x, p.y + 1, Color.Red);
+                    img.SetPixel(p.x, p.y - 1, Color.Red);
+                    img.SetPixel(p.x + 1, p.y, Color.Red);
+                    img.SetPixel(p.x - 1, p.y, Color.Red);
+                }
+                    
+            }
 
-
-        private  void BorderFill(int x, int y)
-        {
-
-           
-            TraceBorder(x, y);
-            SortBP();
-            ScanRegion(ref x, ref y);
-
-            TraceBorder(x, y);
-            SortBP();
-            ScanRegion(ref x, ref y);
-
-
-            FillRegion();
             
             
         }
@@ -183,20 +147,20 @@ namespace Filling
             int xr;
             while (i < BPend - 1)
             {
-                if (BP[i].flag == BLOCKED)
+                if (BorderList[i].flag == BLOCKED)
                     ++i;
                 else
-                if (BP[i].y != BP[i + 1].y)
+                if (BorderList[i].y != BorderList[i + 1].y)
                     ++i;
                 else
                 {
-                    if (BP[i].x < BP[i+1].x-1)
+                    if (BorderList[i].x < BorderList[i+1].x-1)
                     {
-                        xr = ScanRight(BP[i].x + 1, BP[i].y);
-                        if (xr < BP[i + 1].x)
+                        xr = ScanRight(BorderList[i].x + 1, BorderList[i].y);
+                        if (xr < BorderList[i + 1].x)
                         {
                             x = xr;
-                            y = BP[i].y;
+                            y = BorderList[i].y;
                             break;
                         }
                     }
@@ -208,28 +172,26 @@ namespace Filling
 
         private static void SortBP()
         {
-            BP.Sort(delegate (BPstruct s1, BPstruct s2) { return s1.Compare(s2); });
+            BorderList.Sort(delegate (BorderPointStruct s1, BorderPointStruct s2) { return s1.Compare(s2); });
         }
 
         private  void FillRegion()
         {
-            var BP1 = BP.Distinct(new MyComparer()).ToList();
+            var DistinctBPList = BorderList.Distinct(new MyComparer()).ToList();
             int it = 0;
-            for (int i = 0; i<BP1.Count - 1; )
+            for (int i = 0; i<DistinctBPList.Count - 1; )
             {
-                if (BP1[i].flag == BLOCKED)
+                if (DistinctBPList[i].flag == BLOCKED)
                     ++i;
                 else
-                if (BP1[i].y != BP1[i + 1].y)
+                if (DistinctBPList[i].y != DistinctBPList[i + 1].y)
                     ++i;
                 else
                 {
-                    if (BP1[i].x < BP1[i+1].x - 1)
+                    if (DistinctBPList[i].x < DistinctBPList[i+1].x - 1)
                     {
                         Graphics g = Graphics.FromImage(img);
-                        g.DrawLine(Pens.Red, new Point(BP1[i].x + 1, BP1[i].y), new Point(BP1[i + 1].x - 1, BP1[i + 1].y));
-                        refresh();
-
+                        g.DrawLine(Pens.Red, new Point(DistinctBPList[i].x + 1, DistinctBPList[i].y), new Point(DistinctBPList[i + 1].x - 1, DistinctBPList[i + 1].y));
                         i += 2;
                     }
                 }
@@ -242,8 +204,8 @@ namespace Filling
             }
         }
 
-        private static BPstruct CurrentPixel;
-        private static int d = 0;
+        private static BorderPointStruct CurrentPixel;
+        private static int CurrentDirection = 0;
         private static int PrevD = 0;
         private static int PrevV = 0;
 
@@ -254,7 +216,7 @@ namespace Filling
             CurrentPixel.x = StartX;
             CurrentPixel.y = StartY;
 
-            d = 6;
+            CurrentDirection = 6;
             PrevD = 8;
             PrevV = 2;
             do
@@ -279,10 +241,10 @@ namespace Filling
             bool flag = false;
             for (int i = -1; i <= 5; ++i)
             {
-                flag = FindBP((d + i) & 7);
+                flag = FindBP((CurrentDirection + i) & 7);
                 if (flag)
                 {
-                    d = (d + i) & 6;
+                    CurrentDirection = (CurrentDirection + i) & 6;
                     break;
                 }
             }
@@ -295,7 +257,7 @@ namespace Filling
             x = CurrentPixel.x;
             y = CurrentPixel.y;
             NextXY(ref x,ref y, d);
-            if (img.GetPixel(x, y).ToArgb().Equals(BorderValue.ToArgb()))
+            if (img.GetPixel(x, y).ToArgb().Equals(BorderColor.ToArgb()))
             {
                 AddBPList(d);
                 CurrentPixel.x = x;
@@ -343,14 +305,15 @@ namespace Filling
             else
             {
                 DifferentDirection(d);
-                PrevD = d;
+                PrevV = d;
             }
+            PrevD = d;
         }
 
         private static void SameDirection()
         {
             if (PrevD == 0)
-                BP[BPend - 1].flag = BLOCKED;
+                BorderList[BPend - 1].flag = BLOCKED;
             else
             if (PrevD != 4)
                 AppendBPList(CurrentPixel.x, CurrentPixel.y, UNBLOCKED);
@@ -361,14 +324,14 @@ namespace Filling
             if (PrevD == 4)
             {
                 if (PrevD == 5)
-                    BP[BPend - 1].flag = BLOCKED;
+                    BorderList[BPend - 1].flag = BLOCKED;
                 
                 AppendBPList(CurrentPixel.x, CurrentPixel.y, BLOCKED);
             }
             else
             if (PrevD == 0)
             {
-                BP[BPend - 1].flag = BLOCKED;
+                BorderList[BPend - 1].flag = BLOCKED;
                 if (d == 7)
                     AppendBPList(CurrentPixel.x, CurrentPixel.y, BLOCKED);
                 else
@@ -385,14 +348,14 @@ namespace Filling
 
         private static void AppendBPList(int p, int q, int f)
         {
-            BP.Add(new BPstruct(p, q, f));
+            BorderList.Add(new BorderPointStruct(p, q, f));
             ++BPend;
         }
         private static int Xmax = 1200;
 
         private static int ScanRight(int x, int y)
         {
-            while (!img.GetPixel(x, y).ToArgb().Equals(BorderValue.ToArgb()))
+            while (!img.GetPixel(x, y).ToArgb().Equals(BorderColor.ToArgb()))
             {
                 ++x;
                 if (x == Xmax)
@@ -400,5 +363,9 @@ namespace Filling
             }
             return (x);
         }
+
+        
+
+        
     }
 }
